@@ -55,6 +55,8 @@ class ContactController extends Controller
         $data = $request->validated();
         $contact = $this->contactRepository->update($id, $data);
         return response()->json($contact);
+
+        
     }
 
     /**

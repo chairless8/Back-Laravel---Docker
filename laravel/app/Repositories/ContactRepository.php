@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Repositories;
 
 use App\Models\Contact;
@@ -40,7 +41,11 @@ class ContactRepository implements ContactRepositoryInterface
 
     public function create(array $data)
     {
-        $contact = Contact::create($data);
+        // Crear el contacto principal
+        $contactData = $data;
+        unset($contactData['phones'], $contactData['emails'], $contactData['addresses']);
+
+        $contact = Contact::create($contactData);
 
         // Guardar relaciones
         $this->saveRelations($contact, $data);
@@ -48,35 +53,20 @@ class ContactRepository implements ContactRepositoryInterface
         return $contact->load(['phones', 'emails', 'addresses']);
     }
 
-    public function update($id, array $data)
+    public function update($id,  array $data)
     {
-      $contact = Contact::findOrFail($id);
-      $contact->update($data);
-
-      // Actualizar relaciones
-      if (isset($data['phones'])) {
-        $contact->phones()->delete(); // O puedes actualizar los existentes sin borrarlos si es necesario
-        foreach ($data['phones'] as $phone) {
-            $contact->phones()->create(['phone_number' => $phone]);
-        }
-      }
-  
-      if (isset($data['emails'])) {
-          $contact->emails()->delete();
-          foreach ($data['emails'] as $email) {
-              $contact->emails()->create(['email' => $email]);
-          }
-      }
-  
-      if (isset($data['addresses'])) {
-          $contact->addresses()->delete();
-          foreach ($data['addresses'] as $address) {
-              $contact->addresses()->create($address);
-          }
-      }
-
-      return $contact->load(['phones', 'emails', 'addresses']);
-    }
+        $contact = Contact::findOrFail($id);
+    
+        // Actualizar el contacto principal
+        $contactData = $data;
+        unset($contactData['phones'], $contactData['emails'], $contactData['addresses'], $contactData['phones_to_delete'], $contactData['emails_to_delete'], $contactData['addresses_to_delete']);
+        $contact->update($contactData);
+    
+        // Actualizar relaciones
+        $this->updateRelations($contact, $data);
+    
+        return $contact->load(['phones', 'emails', 'addresses']);
+    }    
 
     public function delete($id)
     {
@@ -88,21 +78,76 @@ class ContactRepository implements ContactRepositoryInterface
 
     private function saveRelations(Contact $contact, array $data)
     {
+        // Guardar teléfonos
         if (isset($data['phones'])) {
-            foreach ($data['phones'] as $phone) {
-                $contact->phones()->create(['phone_number' => $phone]);
+            foreach ($data['phones'] as $phoneData) {
+                $contact->phones()->create([
+                    'phone_number' => $phoneData['phone_number'],
+                ]);
             }
         }
 
+        // Guardar emails
         if (isset($data['emails'])) {
-            foreach ($data['emails'] as $email) {
-                $contact->emails()->create(['email' => $email]);
+            foreach ($data['emails'] as $emailData) {
+                $contact->emails()->create([
+                    'email' => $emailData['email'],
+                ]);
             }
         }
 
+        // Guardar direcciones
         if (isset($data['addresses'])) {
-            foreach ($data['addresses'] as $address) {
-                $contact->addresses()->create($address);
+            foreach ($data['addresses'] as $addressData) {
+                $contact->addresses()->create($addressData);
+            }
+        }
+    }
+
+    private function updateRelations(Contact $contact, array $data)
+    {
+        // Eliminar teléfonos marcados para eliminación
+        if (isset($data['phones_to_delete'])) {
+            $contact->phones()->whereIn('id', $data['phones_to_delete'])->delete();
+        }
+
+        // Crear o actualizar teléfonos
+        if (isset($data['phones'])) {
+            foreach ($data['phones'] as $phoneData) {
+                $contact->phones()->updateOrCreate(
+                    ['id' => $phoneData['id'] ?? null],
+                    ['phone_number' => $phoneData['phone_number']]
+                );
+            }
+        }
+
+        // Eliminar emails marcados para eliminación
+        if (isset($data['emails_to_delete'])) {
+            $contact->emails()->whereIn('id', $data['emails_to_delete'])->delete();
+        }
+
+        // Crear o actualizar emails
+        if (isset($data['emails'])) {
+            foreach ($data['emails'] as $emailData) {
+                $contact->emails()->updateOrCreate(
+                    ['id' => $emailData['id'] ?? null],
+                    ['email' => $emailData['email']]
+                );
+            }
+        }
+
+        // Eliminar direcciones marcadas para eliminación
+        if (isset($data['addresses_to_delete'])) {
+            $contact->addresses()->whereIn('id', $data['addresses_to_delete'])->delete();
+        }
+
+        // Crear o actualizar direcciones
+        if (isset($data['addresses'])) {
+            foreach ($data['addresses'] as $addressData) {
+                $contact->addresses()->updateOrCreate(
+                    ['id' => $addressData['id'] ?? null],
+                    $addressData
+                );
             }
         }
     }
